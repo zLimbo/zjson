@@ -10,7 +10,8 @@ enum Ret {
     PARSE_OK,
     PARSE_INVALID_VALUE,
     PARSE_EXPECT_VALUE,
-    PARSE_ROOT_NOT_SINGULAR
+    PARSE_ROOT_NOT_SINGULAR,
+    PARSE_NUMBER_TOO_BIG
 };
 
 constexpr std::string_view LITERAL_NULL = "null";
@@ -30,14 +31,17 @@ public:
     Ret parse_literal(std::string_view &sv, std::string_view literal_value,
                       Type type);
     Ret parse_number(std::string_view &sv);
-    double get_as_number();
+    double get_number();
+
+private:
+    void clear();
 
 private:
     Type type_;
 
     union {
-        double number;
-    } value_;
+        double number_;
+    };
 };
 
 Json parse(std::string_view sv);
