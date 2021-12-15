@@ -36,8 +36,12 @@ void Json::copy(const Json &other) {
     type_ = other.type_;
     switch (type_) {
         case TYPE_NUMBER: value_.number = other.value_.number; break;
-        case TYPE_STRING: *value_.str = *other.value_.str; break;
-        case TYPE_ARRAY: *value_.array = *other.value_.array; break;
+        case TYPE_STRING:
+            value_.str = new std::string(*other.value_.str);
+            break;
+        case TYPE_ARRAY:
+            value_.array = new std::vector<Json>(*other.value_.array);
+            break;
         default: break;
     }
 }
@@ -46,6 +50,7 @@ Json::Json(const Json &other) { copy(other); }
 
 Json &Json::operator=(const Json &other) {
     if (this != &other) {
+        clear();
         copy(other);
     }
     return *this;
@@ -57,7 +62,7 @@ void Json::move(Json &other) {
     memset(&other.value_, 0, sizeof(other.value_));
 }
 
-Json::Json(Json &&other) { move(other); }
+Json::Json(Json &&other) noexcept { move(other); }
 
 Json &Json::operator=(Json &&other) {
     if (this != &other) {
@@ -76,9 +81,9 @@ inline void Json::parse_whitespace(const char *&text) {
     }
 }
 
-Ret Json::parse_literal(const char *&text, std::string_view literal_value,
+Ret Json::parse_literal(const char *&text, std::string_view literal,
                         Type type) {
-    for (char c : literal_value) {
+    for (char c : literal) {
         if (*text++ != c) return PARSE_INVALID_VALUE;
     }
     type_ = type;
@@ -89,6 +94,8 @@ Ret Json::parse(const char *text) {
     clear();
 
     Ret ret = parse_text(text);
+
+    assert(stack_.size() == 0);
     if (ret != PARSE_OK) {
         return ret;
     }
@@ -111,17 +118,21 @@ Ret Json::parse_text(const char *&text) {
     switch (*text) {
         case 'n':
             // ret = parse_null(text);
-            ret = parse_literal(text, LITERAL_NULL, TYPE_NULL);
+            ret = parse_literal(text, "null", TYPE_NULL);
             break;
         case 't':
             // ret = parse_true(text);
-            ret = parse_literal(text, LITERAL_TRUE, TYPE_TRUE);
+            ret = parse_literal(text, "true", TYPE_TRUE);
             break;
         case 'f':
             // ret = parse_false(text);
-            ret = parse_literal(text, LITERAL_FALSE, TYPE_FALSE);
+            ret = parse_literal(text, "false", TYPE_FALSE);
             break;
-        case '\"': ret = parse_string(text); break;
+        case '\"': {
+            size_t top = stack_.size();
+            ret = parse_string(text);
+            stack_.resize(top);
+        } break;
         case '[': ret = parse_array(text); break;
         case '{':
         default: ret = parse_number(text);
@@ -275,33 +286,41 @@ Ret Json::parse_string(const char *&text) {
     }
     value_.str = new std::string(stack_.data() + start_pos);
     type_ = TYPE_STRING;
-    stack_.resize(start_pos);
     return PARSE_OK;
 }
 
 Ret Json::parse_array(const char *&text) {
+    ++text;
     parse_whitespace(text);
+    if (!*text) {
+        return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+    } else if (*text == ']') {
+        value_.array = new std::vector<Json>();
+        type_ = TYPE_ARRAY;
+        ++text;
+        return PARSE_OK;
+    }
 
-    // std::vector<Json> array;
-    // for (;;) {
-    //     Json value;
-    //     text = text.substr(1);
-    //     Ret ret = value.parse_text(text);
-    //     if (ret != PARSE_OK) return ret;
-    //     array.emplace_back(std::move(value));
-    //     parse_whitespace(text);
-    //     if (text.empty()) {
-    //         return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
-    //     }
-    //     if (text[0] == ']') {
-    //         break;
-    //     } else if (text[0] != ',') {
-    //         return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
-    //     }
-    // }
-    // type_ = TYPE_ARRAY;
-    // value_.array = new std::vector<Json>(std::move(array));
-    // text = text.substr(1);
+    std::vector<Json> array;
+    for (;;) {
+        Json value;
+        Ret ret = value.parse_text(text);
+        if (ret != PARSE_OK) return ret;
+        array.emplace_back(std::move(value));
+
+        parse_whitespace(text);
+        if (!*text) {
+            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+        } else if (*text == ']') {
+            break;
+        } else if (*text != ',') {
+            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+        }
+        ++text;
+    }
+    type_ = TYPE_ARRAY;
+    value_.array = new std::vector<Json>(std::move(array));
+    ++text;
     return PARSE_OK;
 }
 

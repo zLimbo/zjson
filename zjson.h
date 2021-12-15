@@ -16,6 +16,7 @@ enum Type {
     TYPE_STRING,
     TYPE_ARRAY
 };
+
 enum Ret {
     PARSE_OK,
     PARSE_INVALID_VALUE,
@@ -27,18 +28,17 @@ enum Ret {
     PARSE_INVALID_STRING_CHAR,
     PARSE_INVALID_UNICODE_HEX,
     PARSE_INVALID_UNICODE_SURROGATE,
-    PARSE_MISS_COMMA_OR_SQUARE_BRACKET
+    PARSE_MISS_COMMA_OR_SQUARE_BRACKET,
+    PARSE_MISS_KEY,
+    PARSE_MISS_COLON,
+    PARSE_MISS_COMMA_OR_CURLY_BRACKET
 };
-
-constexpr const char *LITERAL_NULL = "null";
-constexpr const char *LITERAL_TRUE = "true";
-constexpr const char *LITERAL_FALSE = "false";
 
 class Json {
 public:
     Json();
     Json(const Json &other);
-    Json(Json &&other);
+    Json(Json &&other) noexcept;
     Json &operator=(const Json &other);
     Json &operator=(Json &&other);
     ~Json();
