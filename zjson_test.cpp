@@ -209,12 +209,58 @@ static void test_parse_invalid_unicode_surrogate() {
     TEST_ERROR(PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
 }
 
+static void test_parse_array() {
+    size_t i, j;
+    Json v;
+
+    EXPECT_EQ(PARSE_OK, v.parse("[ ]"));
+    EXPECT_EQ(TYPE_ARRAY, v.get_type());
+    EXPECT_EQ(0, v.get_array().size());
+
+    v.clear();
+
+    EXPECT_EQ(PARSE_OK, v.parse("[ null , false , true , 123 , \"abc\" ]"));
+    EXPECT_EQ(TYPE_ARRAY, v.get_type());
+    EXPECT_EQ(5, v.get_array().size());
+    EXPECT_EQ(NULL, v.get_array_element(0).get_type());
+    EXPECT_EQ(TYPE_FALSE, v.get_array_element(1).get_type());
+    EXPECT_EQ(TYPE_TRUE, v.get_array_element(2).get_type());
+    EXPECT_EQ(TYPE_NUMBER, v.get_array_element(3).get_type());
+    EXPECT_EQ(TYPE_STRING, v.get_array_element(4).get_type());
+    EXPECT_EQ(123.0, v.get_array_element(3).get_number());
+    EXPECT_EQ("abc", v.get_array_element(4).get_string());
+
+    v.clear();
+
+    EXPECT_EQ(PARSE_OK, v.parse("[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"));
+    EXPECT_EQ(TYPE_ARRAY, v.get_type());
+    EXPECT_EQ(4, v.get_array().size());
+    for (i = 0; i < 4; i++) {
+        const Json& a = v.get_array_element(i);
+        EXPECT_EQ(TYPE_ARRAY, a.get_type());
+        EXPECT_EQ(i, a.get_array().size());
+        for (j = 0; j < i; j++) {
+            const Json& e = a.get_array_element(j);
+            EXPECT_EQ(TYPE_NUMBER, e.get_type());
+            EXPECT_EQ((double)j, e.get_number());
+        }
+    }
+}
+
+static void test_parse_miss_comma_or_square_bracket() {
+    TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1");
+    TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1}");
+    TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1 2");
+    TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
+}
+
 static void test_parse() {
     test_parse_null();
     test_parse_true();
     test_parse_false();
     test_parse_number();
     test_parse_string();
+    test_parse_array();
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
@@ -224,6 +270,7 @@ static void test_parse() {
     test_parse_invalid_string_char();
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
+    test_parse_miss_comma_or_square_bracket();
 }
 
 int main() {

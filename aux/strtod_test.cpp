@@ -19,6 +19,7 @@ int main() {
     x = strtod("-1e309", nullptr);
     cout << x << endl;
     cout << HUGE_VAL << endl;
+    vector<int> v;
 
     return 0;
 }

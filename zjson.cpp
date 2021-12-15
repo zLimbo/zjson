@@ -1,20 +1,11 @@
 #include "zjson.h"
 
-#define FMT_HEADER_ONLY
 #include <errno.h>
-#include <fmt/printf.h>
 
 #include <cassert>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
-
-#define LOG(format)                               \
-    do {                                          \
-        fmt::print("{}:{}:", __FILE__, __LINE__); \
-        fmt::print(format);                       \
-        fmt::print("\n");                         \
-    } while (0)
 
 namespace zjson {
 
@@ -26,68 +17,88 @@ void Json::clear() {
                 value_.str = nullptr;
             }
             break;
+        case TYPE_ARRAY:
+            if (value_.array) {
+                delete value_.array;
+                value_.array = nullptr;
+            }
+            break;
         default: break;
     }
     memset(&value_, 0, sizeof(value_));
     type_ = TYPE_NULL;
+    stack_.clear();
 }
 
 Json::Json() : type_(TYPE_NULL) { memset(&value_, 0, sizeof(value_)); }
 
+void Json::copy(const Json &other) {
+    type_ = other.type_;
+    switch (type_) {
+        case TYPE_NUMBER: value_.number = other.value_.number; break;
+        case TYPE_STRING: *value_.str = *other.value_.str; break;
+        case TYPE_ARRAY: *value_.array = *other.value_.array; break;
+        default: break;
+    }
+}
+
+Json::Json(const Json &other) { copy(other); }
+
+Json &Json::operator=(const Json &other) {
+    if (this != &other) {
+        copy(other);
+    }
+    return *this;
+}
+
+void Json::move(Json &other) {
+    type_ = other.type_;
+    memcpy(&value_, &other.value_, sizeof(value_));
+    memset(&other.value_, 0, sizeof(other.value_));
+}
+
+Json::Json(Json &&other) { move(other); }
+
+Json &Json::operator=(Json &&other) {
+    if (this != &other) {
+        clear();
+        move(other);
+    }
+    return *this;
+}
+
 Json::~Json() { clear(); }
 
 /* ws = *(%x20 / %x09 / %x0A / %x0D) */
-inline void Json::parse_whitespace(std::string_view &sv) {
+inline void Json::parse_whitespace(std::string_view &text) {
     size_t pos = 0;
-    while (pos < sv.size() && (sv[pos] == ' ' || sv[pos] == '\t' ||
-                               sv[pos] == '\n' || sv[pos] == '\r')) {
+    while (pos < text.size() && (text[pos] == ' ' || text[pos] == '\t' ||
+                                 text[pos] == '\n' || text[pos] == '\r')) {
         ++pos;
     }
-    sv = sv.substr(pos);
+    text = text.substr(pos);
 }
 
-Ret Json::parse_literal(std::string_view &sv, std::string_view literal_value,
+Ret Json::parse_literal(std::string_view &text, std::string_view literal_value,
                         Type type) {
-    if (sv.substr(0, literal_value.size()) != literal_value) {
+    if (text.substr(0, literal_value.size()) != literal_value) {
         return PARSE_INVALID_VALUE;
     }
-    sv = sv.substr(literal_value.size());
+    text = text.substr(literal_value.size());
     type_ = type;
     return PARSE_OK;
 }
 
-Ret Json::parse(std::string_view sv) {
+Ret Json::parse(std::string_view text) {
     clear();
-    parse_whitespace(sv);
-    if (sv.empty()) {
-        return PARSE_EXPECT_VALUE;
-    }
-    Ret ret = PARSE_INVALID_VALUE;
-    switch (sv[0]) {
-        case 'n':
-            // ret = parse_null(sv);
-            ret = parse_literal(sv, LITERAL_NULL, TYPE_NULL);
-            break;
-        case 't':
-            // ret = parse_true(sv);
-            ret = parse_literal(sv, LITERAL_TRUE, TYPE_TRUE);
-            break;
-        case 'f':
-            // ret = parse_false(sv);
-            ret = parse_literal(sv, LITERAL_FALSE, TYPE_FALSE);
-            break;
-        case '\"': ret = parse_string(sv); break;
-        case '[':
-        case '{':
-        default: ret = parse_number(sv);
-    }
 
+    Ret ret = parse_text(text);
     if (ret != PARSE_OK) {
         return ret;
     }
 
-    parse_whitespace(sv);
-    if (!sv.empty()) {
+    parse_whitespace(text);
+    if (!text.empty()) {
         clear();
         return PARSE_ROOT_NOT_SINGULAR;
     }
@@ -95,10 +106,37 @@ Ret Json::parse(std::string_view sv) {
     return ret;
 }
 
-Ret Json::parse_number(std::string_view &sv) {
+Ret Json::parse_text(std::string_view &text) {
+    parse_whitespace(text);
+    if (text.empty()) {
+        return PARSE_EXPECT_VALUE;
+    }
+    Ret ret = PARSE_INVALID_VALUE;
+    switch (text[0]) {
+        case 'n':
+            // ret = parse_null(text);
+            ret = parse_literal(text, LITERAL_NULL, TYPE_NULL);
+            break;
+        case 't':
+            // ret = parse_true(text);
+            ret = parse_literal(text, LITERAL_TRUE, TYPE_TRUE);
+            break;
+        case 'f':
+            // ret = parse_false(text);
+            ret = parse_literal(text, LITERAL_FALSE, TYPE_FALSE);
+            break;
+        case '\"': ret = parse_string(text); break;
+        case '[': ret = parse_array(text); break;
+        case '{':
+        default: ret = parse_number(text);
+    }
+    return ret;
+}
+
+Ret Json::parse_number(std::string_view &text) {
     // TODO 暂时使用系统库的解析方式匹配测试用例
     // 检查
-    const char *p = sv.data();
+    const char *p = text.data();
     if (*p == '-') {
         ++p;
     }
@@ -134,12 +172,12 @@ Ret Json::parse_number(std::string_view &sv) {
         while (isdigit(*p)) ++p;
     }
 
-    double number = strtod(sv.data(), nullptr);
+    double number = strtod(text.data(), nullptr);
     if (std::isinf(number)) {
         return PARSE_NUMBER_TOO_BIG;
     }
 
-    sv = p;
+    text = p;
     type_ = TYPE_NUMBER;
     value_.number = number;
     return PARSE_OK;
@@ -159,13 +197,13 @@ inline static int ch2hex(char ch) {
     return hex;
 }
 
-int Json::parse_hex4(std::string_view sv) {
-    if (sv.size() < 4) {
+int Json::parse_hex4(std::string_view text) {
+    if (text.size() < 4) {
         return -1;
     }
     int code = 0;
     for (int i = 0; i < 4; ++i) {
-        int hex = ch2hex(sv[i]);
+        int hex = ch2hex(text[i]);
         if (hex < 0) {
             return -1;
         }
@@ -174,18 +212,19 @@ int Json::parse_hex4(std::string_view sv) {
     return code;
 }
 
-std::tuple<Ret, int> Json::encode_utf8(std::string_view sv) {
+std::tuple<Ret, int> Json::encode_utf8(std::string_view text) {
     size_t pos = 0;
-    int code = parse_hex4(sv.substr(pos));
+    int code = parse_hex4(text.substr(pos));
     if (code < 0) {
         return {PARSE_INVALID_UNICODE_HEX, 0};
     }
     pos += 4;
     if (code >= 0xD800 && code < 0xDC00) {
-        if (pos + 2 >= sv.size() || sv[pos++] != '\\' || sv[pos++] != 'u') {
+        if (pos + 2 >= text.size() || text[pos++] != '\\' ||
+            text[pos++] != 'u') {
             return {PARSE_INVALID_UNICODE_SURROGATE, 0};
         }
-        int surrogate = parse_hex4(sv.substr(pos));
+        int surrogate = parse_hex4(text.substr(pos));
         if (surrogate < 0 || !(surrogate >= 0xDC00 && surrogate < 0xE000)) {
             return {PARSE_INVALID_UNICODE_SURROGATE, 0};
         }
@@ -212,16 +251,16 @@ std::tuple<Ret, int> Json::encode_utf8(std::string_view sv) {
     return {PARSE_OK, pos};
 }
 
-Ret Json::parse_string(std::string_view &sv) {
+Ret Json::parse_string(std::string_view &text) {
     size_t start_pos = stack_.size();
     size_t pos = 1;
-    while (pos < sv.size() && sv[pos] != '\"') {
-        unsigned char ch = sv[pos++];
+    while (pos < text.size() && text[pos] != '\"') {
+        unsigned char ch = text[pos++];
         if (ch == '\\') {
-            if (pos == sv.size()) {
+            if (pos == text.size()) {
                 break;
             }
-            ch = sv[pos++];
+            ch = text[pos++];
             switch (ch) {
                 case 'b': stack_push('\b'); break;
                 case 'f': stack_push('\f'); break;
@@ -232,7 +271,7 @@ Ret Json::parse_string(std::string_view &sv) {
                 case '\"': stack_push('\"'); break;
                 case '\\': stack_push('\\'); break;
                 case 'u': {
-                    auto [ret, add] = encode_utf8(sv.substr(pos));
+                    auto [ret, add] = encode_utf8(text.substr(pos));
                     if (ret != PARSE_OK) {
                         return ret;
                     }
@@ -246,16 +285,49 @@ Ret Json::parse_string(std::string_view &sv) {
             stack_push(ch);
         }
     }
-    if (pos == sv.size()) {
+    if (pos == text.size()) {
         return PARSE_MISS_QUOTATION_MARK;
     }
-    size_t len = stack_.size() - start_pos;
     value_.str = new std::string(stack_.data() + start_pos);
     type_ = TYPE_STRING;
 
     stack_.resize(start_pos);
-    sv = sv.substr(pos + 1);
+    text = text.substr(pos + 1);
     return PARSE_OK;
+}
+
+Ret Json::parse_array(std::string_view &text) {
+    std::vector<Json> array;
+    for (;;) {
+        Json value;
+        text = text.substr(1);
+        Ret ret = value.parse_text(text);
+        if (ret != PARSE_OK) return ret;
+        array.emplace_back(std::move(value));
+        parse_whitespace(text);
+        if (text.empty()) {
+            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+        }
+        if (text[0] == ']') {
+            break;
+        } else if (text[0] != ',') {
+            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+        }
+    }
+    type_ = TYPE_ARRAY;
+    value_.array = new std::vector<Json>(std::move(array));
+    text = text.substr(1);
+    return PARSE_OK;
+}
+
+bool Json::is_bool(bool b) const {
+    switch (type_) {
+        case TYPE_TRUE: return b;
+        case TYPE_FALSE: return !b;
+        default: break;
+    }
+    throw std::runtime_error("json value isn't number!");
+    return false;
 }
 
 double Json::get_number() const {
@@ -270,6 +342,17 @@ const std::string &Json::get_string() const {
         throw std::runtime_error("json value isn't string!");
     }
     return *value_.str;
+}
+
+const std::vector<Json> &Json::get_array() const {
+    if (type_ != TYPE_ARRAY) {
+        throw std::runtime_error("json value isn't array!");
+    }
+    return *value_.array;
+}
+
+const Json &Json::get_array_element(size_t idx) const {
+    return get_array()[idx];
 }
 
 }  // namespace zjson
