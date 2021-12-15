@@ -5,4 +5,8 @@
     IndentWidth: 4, 
     TabWidth: 4,
     ColumnLimit: 80,
+    # 允许短的块放在同一行
+    AllowShortBlocksOnASingleLine:	false,
+    # 允许短的case标签放在同一行
+    AllowShortCaseLabelsOnASingleLine:	true,
 }
