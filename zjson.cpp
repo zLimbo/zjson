@@ -22,7 +22,8 @@ void Json::clear() {
     switch (type_) {
         case TYPE_STRING:
             if (value_.str) {
-                free(value_.str);
+                delete value_.str;
+                value_.str = nullptr;
             }
             break;
         default: break;
@@ -249,9 +250,7 @@ Ret Json::parse_string(std::string_view &sv) {
         return PARSE_MISS_QUOTATION_MARK;
     }
     size_t len = stack_.size() - start_pos;
-    value_.str = (char *)malloc(len + 1);
-    memcpy(value_.str, stack_.data() + start_pos, len);
-    value_.str[len] = '\0';
+    value_.str = new std::string(stack_.data() + start_pos);
     type_ = TYPE_STRING;
 
     stack_.resize(start_pos);
@@ -266,11 +265,11 @@ double Json::get_number() const {
     return value_.number;
 }
 
-const char *Json::get_string() const {
+const std::string &Json::get_string() const {
     if (type_ != TYPE_STRING) {
         throw std::runtime_error("json value isn't string!");
     }
-    return value_.str;
+    return *value_.str;
 }
 
 }  // namespace zjson

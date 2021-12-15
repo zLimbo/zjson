@@ -46,7 +46,7 @@ public:
 
 public:
     double get_number() const;
-    const char *get_string() const;
+    const std::string &get_string() const;
 
 private:
     void clear();
@@ -56,7 +56,7 @@ private:
 
     union {
         double number;
-        char *str;
+        std::string *str;
     } value_;
 
     std::string stack_;
