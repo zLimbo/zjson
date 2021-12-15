@@ -30,9 +30,9 @@ enum Ret {
     PARSE_MISS_COMMA_OR_SQUARE_BRACKET
 };
 
-constexpr std::string_view LITERAL_NULL = "null";
-constexpr std::string_view LITERAL_TRUE = "true";
-constexpr std::string_view LITERAL_FALSE = "false";
+constexpr const char *LITERAL_NULL = "null";
+constexpr const char *LITERAL_TRUE = "true";
+constexpr const char *LITERAL_FALSE = "false";
 
 class Json {
 public:
@@ -49,7 +49,7 @@ public:
     void stack_push(char ch) { stack_.push_back(ch); }
 
 public:
-    Ret parse(std::string_view text);
+    Ret parse(const char *text);
 
 public:
     bool is_null() const { return type_ == TYPE_NULL; }
@@ -63,20 +63,20 @@ private:
     void copy(const Json &other);
     void move(Json &other);
 
-    Ret parse_text(std::string_view &text);
+    Ret parse_text(const char *&text);
 
-    void parse_whitespace(std::string_view &text);
+    void parse_whitespace(const char *&text);
 
-    Ret parse_literal(std::string_view &text, std::string_view literal_value,
+    Ret parse_literal(const char *&text, std::string_view literal_value,
                       Type type);
 
-    Ret parse_number(std::string_view &text);
+    Ret parse_number(const char *&text);
 
-    int parse_hex4(std::string_view text);
-    std::tuple<Ret, int> encode_utf8(std::string_view text);
-    Ret parse_string(std::string_view &text);
+    int parse_hex4(const char *&text);
+    Ret encode_utf8(const char *&text);
+    Ret parse_string(const char *&text);
 
-    Ret parse_array(std::string_view &text);
+    Ret parse_array(const char *&text);
 
 private:
     Type type_;
@@ -90,7 +90,7 @@ private:
     std::string stack_;
 };
 
-Json parse(std::string_view text);
+Json parse(const char *text);
 
 }  // namespace zjson
 

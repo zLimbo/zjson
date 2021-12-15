@@ -70,26 +70,22 @@ Json &Json::operator=(Json &&other) {
 Json::~Json() { clear(); }
 
 /* ws = *(%x20 / %x09 / %x0A / %x0D) */
-inline void Json::parse_whitespace(std::string_view &text) {
-    size_t pos = 0;
-    while (pos < text.size() && (text[pos] == ' ' || text[pos] == '\t' ||
-                                 text[pos] == '\n' || text[pos] == '\r')) {
-        ++pos;
+inline void Json::parse_whitespace(const char *&text) {
+    while (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r') {
+        ++text;
     }
-    text = text.substr(pos);
 }
 
-Ret Json::parse_literal(std::string_view &text, std::string_view literal_value,
+Ret Json::parse_literal(const char *&text, std::string_view literal_value,
                         Type type) {
-    if (text.substr(0, literal_value.size()) != literal_value) {
-        return PARSE_INVALID_VALUE;
+    for (char c : literal_value) {
+        if (*text++ != c) return PARSE_INVALID_VALUE;
     }
-    text = text.substr(literal_value.size());
     type_ = type;
     return PARSE_OK;
 }
 
-Ret Json::parse(std::string_view text) {
+Ret Json::parse(const char *text) {
     clear();
 
     Ret ret = parse_text(text);
@@ -98,7 +94,7 @@ Ret Json::parse(std::string_view text) {
     }
 
     parse_whitespace(text);
-    if (!text.empty()) {
+    if (*text) {
         clear();
         return PARSE_ROOT_NOT_SINGULAR;
     }
@@ -106,13 +102,13 @@ Ret Json::parse(std::string_view text) {
     return ret;
 }
 
-Ret Json::parse_text(std::string_view &text) {
+Ret Json::parse_text(const char *&text) {
     parse_whitespace(text);
-    if (text.empty()) {
+    if (!*text) {
         return PARSE_EXPECT_VALUE;
     }
     Ret ret = PARSE_INVALID_VALUE;
-    switch (text[0]) {
+    switch (*text) {
         case 'n':
             // ret = parse_null(text);
             ret = parse_literal(text, LITERAL_NULL, TYPE_NULL);
@@ -133,10 +129,10 @@ Ret Json::parse_text(std::string_view &text) {
     return ret;
 }
 
-Ret Json::parse_number(std::string_view &text) {
+Ret Json::parse_number(const char *&text) {
     // TODO 暂时使用系统库的解析方式匹配测试用例
     // 检查
-    const char *p = text.data();
+    const char *p = text;
     if (*p == '-') {
         ++p;
     }
@@ -172,7 +168,7 @@ Ret Json::parse_number(std::string_view &text) {
         while (isdigit(*p)) ++p;
     }
 
-    double number = strtod(text.data(), nullptr);
+    double number = strtod(text, nullptr);
     if (std::isinf(number)) {
         return PARSE_NUMBER_TOO_BIG;
     }
@@ -197,13 +193,10 @@ inline static int ch2hex(char ch) {
     return hex;
 }
 
-int Json::parse_hex4(std::string_view text) {
-    if (text.size() < 4) {
-        return -1;
-    }
+int Json::parse_hex4(const char *&text) {
     int code = 0;
     for (int i = 0; i < 4; ++i) {
-        int hex = ch2hex(text[i]);
+        int hex = ch2hex(*text++);
         if (hex < 0) {
             return -1;
         }
@@ -212,25 +205,22 @@ int Json::parse_hex4(std::string_view text) {
     return code;
 }
 
-std::tuple<Ret, int> Json::encode_utf8(std::string_view text) {
-    size_t pos = 0;
-    int code = parse_hex4(text.substr(pos));
+Ret Json::encode_utf8(const char *&text) {
+    int code = parse_hex4(text);
     if (code < 0) {
-        return {PARSE_INVALID_UNICODE_HEX, 0};
+        return PARSE_INVALID_UNICODE_HEX;
     }
-    pos += 4;
     if (code >= 0xD800 && code < 0xDC00) {
-        if (pos + 2 >= text.size() || text[pos++] != '\\' ||
-            text[pos++] != 'u') {
-            return {PARSE_INVALID_UNICODE_SURROGATE, 0};
+        if (*text++ != '\\' || *text++ != 'u') {
+            return PARSE_INVALID_UNICODE_SURROGATE;
         }
-        int surrogate = parse_hex4(text.substr(pos));
+        int surrogate = parse_hex4(text);
         if (surrogate < 0 || !(surrogate >= 0xDC00 && surrogate < 0xE000)) {
-            return {PARSE_INVALID_UNICODE_SURROGATE, 0};
+            return PARSE_INVALID_UNICODE_SURROGATE;
         }
         code = 0x10000 + (code - 0xD800) * 0x400 + (surrogate - 0xDC00);
-        pos += 4;
     }
+
     if (code < 0x80) {
         stack_push(code);
     } else if (code < 0x800) {
@@ -246,22 +236,18 @@ std::tuple<Ret, int> Json::encode_utf8(std::string_view text) {
         stack_push(0X80 | (0x3F & (code >> 6)));
         stack_push(0X80 | (0x3F & code));
     } else {
-        return {PARSE_INVALID_UNICODE_HEX, 0};
+        return PARSE_INVALID_UNICODE_HEX;
     }
-    return {PARSE_OK, pos};
+    return PARSE_OK;
 }
 
-Ret Json::parse_string(std::string_view &text) {
+Ret Json::parse_string(const char *&text) {
     size_t start_pos = stack_.size();
-    size_t pos = 1;
-    while (pos < text.size() && text[pos] != '\"') {
-        unsigned char ch = text[pos++];
+    ++text;
+    while (*text && *text != '\"') {
+        unsigned char ch = *text++;
         if (ch == '\\') {
-            if (pos == text.size()) {
-                break;
-            }
-            ch = text[pos++];
-            switch (ch) {
+            switch (*text++) {
                 case 'b': stack_push('\b'); break;
                 case 'f': stack_push('\f'); break;
                 case 'n': stack_push('\n'); break;
@@ -271,11 +257,10 @@ Ret Json::parse_string(std::string_view &text) {
                 case '\"': stack_push('\"'); break;
                 case '\\': stack_push('\\'); break;
                 case 'u': {
-                    auto [ret, add] = encode_utf8(text.substr(pos));
+                    Ret ret = encode_utf8(text);
                     if (ret != PARSE_OK) {
                         return ret;
                     }
-                    pos += add;
                 } break;
                 default: return PARSE_INVALID_STRING_ESCAPE;
             }
@@ -285,38 +270,38 @@ Ret Json::parse_string(std::string_view &text) {
             stack_push(ch);
         }
     }
-    if (pos == text.size()) {
+    if (*text++ != '\"') {
         return PARSE_MISS_QUOTATION_MARK;
     }
     value_.str = new std::string(stack_.data() + start_pos);
     type_ = TYPE_STRING;
-
     stack_.resize(start_pos);
-    text = text.substr(pos + 1);
     return PARSE_OK;
 }
 
-Ret Json::parse_array(std::string_view &text) {
-    std::vector<Json> array;
-    for (;;) {
-        Json value;
-        text = text.substr(1);
-        Ret ret = value.parse_text(text);
-        if (ret != PARSE_OK) return ret;
-        array.emplace_back(std::move(value));
-        parse_whitespace(text);
-        if (text.empty()) {
-            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
-        }
-        if (text[0] == ']') {
-            break;
-        } else if (text[0] != ',') {
-            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
-        }
-    }
-    type_ = TYPE_ARRAY;
-    value_.array = new std::vector<Json>(std::move(array));
-    text = text.substr(1);
+Ret Json::parse_array(const char *&text) {
+    parse_whitespace(text);
+
+    // std::vector<Json> array;
+    // for (;;) {
+    //     Json value;
+    //     text = text.substr(1);
+    //     Ret ret = value.parse_text(text);
+    //     if (ret != PARSE_OK) return ret;
+    //     array.emplace_back(std::move(value));
+    //     parse_whitespace(text);
+    //     if (text.empty()) {
+    //         return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+    //     }
+    //     if (text[0] == ']') {
+    //         break;
+    //     } else if (text[0] != ',') {
+    //         return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+    //     }
+    // }
+    // type_ = TYPE_ARRAY;
+    // value_.array = new std::vector<Json>(std::move(array));
+    // text = text.substr(1);
     return PARSE_OK;
 }
 
