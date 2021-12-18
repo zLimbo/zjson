@@ -26,6 +26,9 @@ static int main_ret = 0;
 #define EXPECT_EQ(expect, actual) \
     EXPECT_EQ_BASE((expect) == (actual), expect, actual)
 
+#define EXPECT_EQ_STRING(expect, actual) \
+    EXPECT_EQ(std::string_view(expect), std::string_view(actual))
+
 #define TEST_PARSE(expect, type, json)        \
     do {                                      \
         Json value;                           \
@@ -168,7 +171,7 @@ static void test_parse_string() {
                 "\"\\ud834\\udd1e\""); /* G clef sign U+1D11E */
 }
 
-static void test_parse_missing_quotation_mark() {
+static void test_parse_miss_quotation_mark() {
     TEST_ERROR(PARSE_MISS_QUOTATION_MARK, "\"");
     TEST_ERROR(PARSE_MISS_QUOTATION_MARK, "\"abc");
 }
@@ -215,30 +218,30 @@ static void test_parse_array() {
 
     EXPECT_EQ(PARSE_OK, v.parse("[ ]"));
     EXPECT_EQ(TYPE_ARRAY, v.get_type());
-    EXPECT_EQ(0, v.get_array().size());
+    EXPECT_EQ(0, v.get_array_size());
 
     v.clear();
 
     EXPECT_EQ(PARSE_OK, v.parse("[ null , false , true , 123 , \"abc\" ]"));
     EXPECT_EQ(TYPE_ARRAY, v.get_type());
-    EXPECT_EQ(5, v.get_array().size());
-    EXPECT_EQ(NULL, v.get_array_element(0).get_type());
+    EXPECT_EQ(5, v.get_array_size());
+    EXPECT_EQ(TYPE_NULL, v.get_array_element(0).get_type());
     EXPECT_EQ(TYPE_FALSE, v.get_array_element(1).get_type());
     EXPECT_EQ(TYPE_TRUE, v.get_array_element(2).get_type());
     EXPECT_EQ(TYPE_NUMBER, v.get_array_element(3).get_type());
     EXPECT_EQ(TYPE_STRING, v.get_array_element(4).get_type());
     EXPECT_EQ(123.0, v.get_array_element(3).get_number());
-    EXPECT_EQ("abc", v.get_array_element(4).get_string());
+    EXPECT_EQ(std::string_view("abc"), v.get_array_element(4).get_string());
 
     v.clear();
 
     EXPECT_EQ(PARSE_OK, v.parse("[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"));
     EXPECT_EQ(TYPE_ARRAY, v.get_type());
-    EXPECT_EQ(4, v.get_array().size());
+    EXPECT_EQ(4, v.get_array_size());
     for (i = 0; i < 4; i++) {
         const Json& a = v.get_array_element(i);
         EXPECT_EQ(TYPE_ARRAY, a.get_type());
-        EXPECT_EQ(i, a.get_array().size());
+        EXPECT_EQ(i, a.get_array_size());
         for (j = 0; j < i; j++) {
             const Json& e = a.get_array_element(j);
             EXPECT_EQ(TYPE_NUMBER, e.get_type());
@@ -281,57 +284,55 @@ static void test_parse_object() {
     Json v;
     size_t i;
 
-    // EXPECT_EQ(PARSE_OK, v.parse(" { } "));
-    // EXPECT_EQ(OBJECT, v.get_type());
-    // EXPECT_EQ(0, v.get_object_size());
-    // v.clear()
+    EXPECT_EQ(PARSE_OK, v.parse(" { } "));
+    EXPECT_EQ(TYPE_OBJECT, v.get_type());
+    EXPECT_EQ(0, v.get_object_size());
+    v.clear();
 
-    //     EXPECT_EQ(PARSE_OK,
-    //               v.parse(" { "
-    //                       "\"n\" : null , "
-    //                       "\"f\" : false , "
-    //                       "\"t\" : true , "
-    //                       "\"i\" : 123 , "
-    //                       "\"s\" : \"abc\", "
-    //                       "\"a\" : [ 1, 2, 3 ],"
-    //                       "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
-    //                       " } "));
-    // EXPECT_EQ(OBJECT, v.get_type());
-    // EXPECT_EQ(7, v.get_object_size());
-    // EXPECT_EQ("n", v.get_object_key(0), v.get_object_key_length(0));
-    // EXPECT_EQ(NULL, v.get_object_value(0).get_type());
-    // EXPECT_EQ("f", v.get_object_key(1), v.get_object_key_length(1));
-    // EXPECT_EQ(FALSE, v.get_object_value(1).get_type());
-    // EXPECT_EQ("t", v.get_object_key(2), v.get_object_key_length(2));
-    // EXPECT_EQ(TRUE, v.get_object_value(2).get_type());
-    // EXPECT_EQ("i", v.get_object_key(3), v.get_object_key_length(3));
-    // EXPECT_EQ(NUMBER, v.get_object_value(3).get_type());
-    // EXPECT_EQ(123.0, get_number(v.get_object_value(3)));
-    // EXPECT_EQ("s", v.get_object_key(4), v.get_object_key_length(4));
-    // EXPECT_EQ(STRING, v.get_object_value(4).get_type());
-    // EXPECT_EQ("abc", get_string(v.get_object_value(4)),
-    //           get_string_length(v.get_object_value(4)));
-    // EXPECT_EQ("a", v.get_object_key(5), v.get_object_key_length(5));
-    // EXPECT_EQ(ARRAY, v.get_object_value(5).get_type());
-    // EXPECT_EQ(3, get_array_size(v.get_object_value(5)));
-    // for (i = 0; i < 3; i++) {
-    //     value* e = get_array_element(v.get_object_value(5), i);
-    //     EXPECT_EQ(NUMBER, get_type(e));
-    //     EXPECT_EQ(i + 1.0, get_number(e));
-    // }
-    // EXPECT_EQ("o", v.get_object_key(6), v.get_object_key_length(6));
-    // {
-    //     value* o = v.get_object_value(6);
-    //     EXPECT_EQ(OBJECT, get_type(o));
-    //     for (i = 0; i < 3; i++) {
-    //         value* ov = get_object_value(o, i);
-    //         EXPECT_TRUE('1' + i == get_object_key(o, i)[0]);
-    //         EXPECT_EQ(1, get_object_key_length(o, i));
-    //         EXPECT_EQ(NUMBER, get_type(ov));
-    //         EXPECT_EQ(i + 1.0, get_number(ov));
-    //     }
-    // }
-    // v.clear()
+    EXPECT_EQ(PARSE_OK, v.parse(" { "
+                                "\"n\" : null , "
+                                "\"f\" : false , "
+                                "\"t\" : true , "
+                                "\"i\" : 123 , "
+                                "\"s\" : \"abc\", "
+                                "\"a\" : [ 1, 2, 3 ],"
+                                "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+                                " } "));
+    EXPECT_EQ(TYPE_OBJECT, v.get_type());
+    EXPECT_EQ(7, v.get_object_size());
+    EXPECT_EQ_STRING("n", v.get_object_key(0));
+    EXPECT_EQ(TYPE_NULL, v.get_object_value(0).get_type());
+    EXPECT_EQ_STRING("f", v.get_object_key(1));
+    EXPECT_EQ(TYPE_FALSE, v.get_object_value(1).get_type());
+    EXPECT_EQ_STRING("t", v.get_object_key(2));
+    EXPECT_EQ(TYPE_TRUE, v.get_object_value(2).get_type());
+    EXPECT_EQ_STRING("i", v.get_object_key(3));
+    EXPECT_EQ(TYPE_NUMBER, v.get_object_value(3).get_type());
+    EXPECT_EQ(123.0, v.get_object_value(3).get_number());
+    EXPECT_EQ_STRING("s", v.get_object_key(4));
+    EXPECT_EQ(TYPE_STRING, v.get_object_value(4).get_type());
+    EXPECT_EQ_STRING("abc", v.get_object_value(4).get_string());
+    EXPECT_EQ_STRING("a", v.get_object_key(5));
+    EXPECT_EQ(TYPE_ARRAY, v.get_object_value(5).get_type());
+    EXPECT_EQ(3, v.get_object_value(5).get_array_size());
+    for (i = 0; i < 3; i++) {
+        Json& e = v.get_object_value(5).get_array_element(i);
+        EXPECT_EQ(TYPE_NUMBER, e.get_type());
+        EXPECT_EQ(i + 1.0, e.get_number());
+    }
+    EXPECT_EQ_STRING("o", v.get_object_key(6));
+    {
+        Json& o = v.get_object_value(6);
+        EXPECT_EQ(TYPE_OBJECT, o.get_type());
+        for (i = 0; i < 3; i++) {
+            Json& ov = o.get_object_value(i);
+            EXPECT_EQ(char('1' + i), o.get_object_key(i)[0]);
+            EXPECT_EQ(1, o.get_object_key_length(i));
+            EXPECT_EQ(TYPE_NUMBER, ov.get_type());
+            EXPECT_EQ(i + 1.0, ov.get_number());
+        }
+    }
+    v.clear();
 }
 
 static void test_parse() {
@@ -347,7 +348,7 @@ static void test_parse() {
     test_parse_invalid_value();
     test_parse_root_not_singular();
     test_parse_number_too_big();
-    test_parse_missing_quotation_mark();
+    test_parse_miss_quotation_mark();
     test_parse_invalid_string_escape();
     test_parse_invalid_string_char();
     test_parse_invalid_unicode_hex();
@@ -358,8 +359,72 @@ static void test_parse() {
     test_parse_miss_comma_or_curly_bracket();
 }
 
+#define TEST_ROUNDTRIP(json)                    \
+    do {                                        \
+        Json value;                             \
+        EXPECT_EQ(PARSE_OK, value.parse(json)); \
+        char* json2 = value.stringify();        \
+        EXPECT_EQ_STRING(json, json2);          \
+        free(json2);                            \
+    } while (0)
+
+static void test_stringify_number() {
+    TEST_ROUNDTRIP("0");
+    TEST_ROUNDTRIP("-0");
+    TEST_ROUNDTRIP("1");
+    TEST_ROUNDTRIP("-1");
+    TEST_ROUNDTRIP("1.5");
+    TEST_ROUNDTRIP("-1.5");
+    TEST_ROUNDTRIP("3.25");
+    TEST_ROUNDTRIP("1e+20");
+    TEST_ROUNDTRIP("1.234e+20");
+    TEST_ROUNDTRIP("1.234e-20");
+
+    TEST_ROUNDTRIP("1.0000000000000002");      /* the smallest number > 1 */
+    TEST_ROUNDTRIP("4.9406564584124654e-324"); /* minimum denormal */
+    TEST_ROUNDTRIP("-4.9406564584124654e-324");
+    TEST_ROUNDTRIP("2.2250738585072009e-308"); /* Max subnormal double */
+    TEST_ROUNDTRIP("-2.2250738585072009e-308");
+    TEST_ROUNDTRIP("2.2250738585072014e-308"); /* Min normal positive double */
+    TEST_ROUNDTRIP("-2.2250738585072014e-308");
+    TEST_ROUNDTRIP("1.7976931348623157e+308"); /* Max double */
+    TEST_ROUNDTRIP("-1.7976931348623157e+308");
+}
+
+static void test_stringify_string() {
+    TEST_ROUNDTRIP("\"\"");
+    TEST_ROUNDTRIP("\"Hello\"");
+    TEST_ROUNDTRIP("\"Hello\\nWorld\"");
+    TEST_ROUNDTRIP("\"\\\" \\\\ / \\b \\f \\n \\r \\t\"");
+    TEST_ROUNDTRIP("\"Hello\\u0000World\"");
+}
+
+static void test_stringify_array() {
+    TEST_ROUNDTRIP("[]");
+    TEST_ROUNDTRIP("[null,false,true,123,\"abc\",[1,2,3]]");
+}
+
+static void test_stringify_object() {
+    TEST_ROUNDTRIP("{}");
+    TEST_ROUNDTRIP(
+        "{\"n\":null,\"f\":false,\"t\":true,\"i\":123,\"s\":\"abc\",\"a\":[1,2,"
+        "3],\"o\":{\"1\":1,\"2\":2,\"3\":3}}");
+}
+
+static void test_stringify() {
+    TEST_ROUNDTRIP("null");
+    TEST_ROUNDTRIP("false");
+    TEST_ROUNDTRIP("true");
+    test_stringify_number();
+    test_stringify_string();
+    test_stringify_array();
+    test_stringify_object();
+}
+
 int main() {
     test_parse();
+    test_stringify();
+    // test_access();
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count,
            100.0 * test_pass / test_count);
     return main_ret;
