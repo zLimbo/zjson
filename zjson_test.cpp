@@ -397,6 +397,11 @@ static void test_stringify_string() {
     TEST_ROUNDTRIP("\"Hello\\nWorld\"");
     TEST_ROUNDTRIP("\"\\\" \\\\ / \\b \\f \\n \\r \\t\"");
     TEST_ROUNDTRIP("\"Hello\\u0000World\"");
+
+    TEST_ROUNDTRIP("\"\\u00A2\"");        /* Cents sign U+00A2 */
+    TEST_ROUNDTRIP("\"\\u20AC\"");        /* Euro sign U+20AC */
+    TEST_ROUNDTRIP("\"\\uD834\\uDD1E\""); /* G clef sign U+1D11E */
+    TEST_ROUNDTRIP("\"\\uD834\\uDD1E\""); /* G clef sign U+1D11E */
 }
 
 static void test_stringify_array() {

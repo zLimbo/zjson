@@ -426,15 +426,52 @@ char *Json::stringify_number() {
     return str_dup(buf, len);
 }
 
-char *Json::stringify_string_raw(const char *str) {
+void Json::stringify_hex4(int code) {
+    char buf[5];
+    for (int i = 3; i >= 0; --i) {
+        int x = code % 16;
+        buf[i] = x < 10 ? x + '0' : x - 10 + 'A';
+        code /= 16;
+    }
+    buf[4] = '\0';
+    stack_push(buf);
+}
+
+int Json::stringify_utf8(const char *str) {
+    char ch = *str++;
+    int count = 1;
+    if ((ch & 0xF0) == 0xF0) {
+        count = 4;
+    } else if ((ch & 0xE0) == 0xE0) {
+        count = 3;
+    } else if ((ch & 0xC0) == 0xC0) {
+        count = 2;
+    }
+    int code = ((ch << count) & 0xFF) >> count;
+    for (int i = 1; i < count; ++i) {
+        code = (code << 6) + (*str++ & 0x3F);
+    }
+    if (code < 0x10000) {
+        stack_push("\\u");
+        stringify_hex4(code);
+    } else {
+        code &= 0xFFFF;
+        int H = code / 0x400 + 0xD800;
+        int L = code % 0x400 + 0xDC00;
+        stack_push("\\u");
+        stringify_hex4(H);
+        stack_push("\\u");
+        stringify_hex4(L);
+    }
+    return count;
+}
+
+char *Json::stringify_string_raw(const char *str, int len) {
     size_t old_top = stack_.size();
     stack_push("\"");
-    while (*str) {
-        if (*str < 0) {
-            stack_push("\\u");
-            continue;
-        }
-        switch (*str) {
+    int pos = 0;
+    while (pos < len) {
+        switch (str[pos]) {
             case '\b': stack_push("\\b"); break;
             case '\f': stack_push("\\f"); break;
             case '\n': stack_push("\\n"); break;
@@ -443,9 +480,16 @@ char *Json::stringify_string_raw(const char *str) {
             case '/': stack_push("/"); break;
             case '\"': stack_push("\\\""); break;
             case '\\': stack_push("\\\\"); break;
-            default: stack_push(*str); break;
+            default: {
+                if (str[pos] < 0x20) {
+                    pos += stringify_utf8(str + pos);
+                    --pos;
+                } else {
+                    stack_push(str[pos]);
+                }
+            } break;
         }
-        ++str;
+        ++pos;
     }
     stack_push("\"");
     char *text = str_dup(stack_.data() + old_top, stack_.size() - old_top);
@@ -454,7 +498,7 @@ char *Json::stringify_string_raw(const char *str) {
 }
 
 char *Json::stringify_string() {
-    return stringify_string_raw(value_.str->data());
+    return stringify_string_raw(value_.str->data(), value_.str->size());
 }
 
 char *Json::stringify_array() {
@@ -478,7 +522,8 @@ char *Json::stringify_object() {
     stack_push('{');
     auto &object = *value_.object;
     for (size_t i = 0; i < object.size(); ++i) {
-        char *ktext = stringify_string_raw(object[i].first.data());
+        char *ktext = stringify_string_raw(object[i].first.data(),
+                                           object[i].first.size());
         char *vtext = object[i].second.stringify();
         stack_push(ktext);
         stack_push(':');

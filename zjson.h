@@ -36,8 +36,6 @@ enum Ret {
     PARSE_MISS_COMMA_OR_CURLY_BRACKET
 };
 
-
-
 class Json {
 public:
     Json();
@@ -87,7 +85,9 @@ private:
     Ret parse_object(const char *&text);
 
     char *stringify_number();
-    char *stringify_string_raw(const char *str);
+    void stringify_hex4(int code);
+    int stringify_utf8(const char *str);
+    char *stringify_string_raw(const char *str, int len);
     char *stringify_string();
     char *stringify_array();
     char *stringify_object();
