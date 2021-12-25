@@ -13,4 +13,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(test test.cpp zjson.hpp)
+add_library(zjson zjson.cpp)
+add_executable(zjson_test zjson_test.cpp)
+target_link_libraries(zjson_test zjson)
+
+# add_executable(zjson_hpp_test zjson_hpp_test.cpp zjson.hpp)

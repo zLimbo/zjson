@@ -9,31 +9,23 @@
 
 namespace zjson {
 
-enum Type {
-    TYPE_NULL,
-    TYPE_TRUE,
-    TYPE_FALSE,
-    TYPE_NUMBER,
-    TYPE_STRING,
-    TYPE_ARRAY,
-    TYPE_OBJECT
-};
+enum class Type { kNull, kTrue, kFalse, kNumber, kString, kArray, kObject };
 
-enum Ret {
-    PARSE_OK,
-    PARSE_INVALID_VALUE,
-    PARSE_EXPECT_VALUE,
-    PARSE_ROOT_NOT_SINGULAR,
-    PARSE_NUMBER_TOO_BIG,
-    PARSE_MISS_QUOTATION_MARK,
-    PARSE_INVALID_STRING_ESCAPE,
-    PARSE_INVALID_STRING_CHAR,
-    PARSE_INVALID_UNICODE_HEX,
-    PARSE_INVALID_UNICODE_SURROGATE,
-    PARSE_MISS_COMMA_OR_SQUARE_BRACKET,
-    PARSE_MISS_KEY,
-    PARSE_MISS_COLON,
-    PARSE_MISS_COMMA_OR_CURLY_BRACKET
+enum class Ret {
+    kParseOk,
+    kParseInvalidValue,
+    kParseExpectValue,
+    kParseRootNotSingular,
+    kParseNumberTooBig,
+    kParseMissQuotationMark,
+    kParseInvalidStringEscape,
+    kParseInvalidStringChar,
+    kParseInvalidUnicodeHex,
+    kParseInvalidUnicodeSurrogate,
+    kParseMissCommaOrSquareBracket,
+    kParseMissKey,
+    kParseMissColon,
+    kParseMissCommaOrCurlyBracket
 };
 
 class Json {
@@ -52,7 +44,7 @@ public:
 
 public:
     Type get_type() const { return type_; }
-    bool is_null() const { return type_ == TYPE_NULL; }
+    bool is_null() const { return type_ == Type::kNull; }
     bool is_bool(bool b) const;
     double get_number() const;
     const char *get_string() const;

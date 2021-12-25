@@ -15,19 +15,19 @@ const char *LITERAL_FALSE = "false";
 
 void Json::clear() {
     switch (type_) {
-        case TYPE_STRING:
+        case Type::kString:
             if (value_.str) {
                 delete value_.str;
                 value_.str = nullptr;
             }
             break;
-        case TYPE_ARRAY:
+        case Type::kArray:
             if (value_.array) {
                 delete value_.array;
                 value_.array = nullptr;
             }
             break;
-        case TYPE_OBJECT:
+        case Type::kObject:
             if (value_.object) {
                 delete value_.object;
                 value_.object = nullptr;
@@ -35,23 +35,21 @@ void Json::clear() {
         default: break;
     }
     memset(&value_, 0, sizeof(value_));
-    type_ = TYPE_NULL;
+    type_ = Type::kNull;
     stack_.clear();
 }
 
-Json::Json() : type_(TYPE_NULL) { memset(&value_, 0, sizeof(value_)); }
+Json::Json() : type_(Type::kNull) { memset(&value_, 0, sizeof(value_)); }
 
 void Json::copy(const Json &other) {
     type_ = other.type_;
     switch (type_) {
-        case TYPE_NUMBER: value_.number = other.value_.number; break;
-        case TYPE_STRING:
-            value_.str = new std::string(*other.value_.str);
-            break;
-        case TYPE_ARRAY:
+        case Type::kNumber: value_.number = other.value_.number; break;
+        case Type::kString: value_.str = new std::string(*other.value_.str); break;
+        case Type::kArray:
             value_.array = new std::vector<Json>(*other.value_.array);
             break;
-        case TYPE_OBJECT:
+        case Type::kObject:
             value_.object = new std::vector<std::pair<std::string, Json>>(
                 *other.value_.object);
             break;
@@ -93,12 +91,12 @@ Ret Json::parse(const char *text) {
     Ret ret = parse_text(text);
     // assert(stack_.size() == 0);
 
-    if (ret != PARSE_OK) return ret;
+    if (ret != Ret::kParseOk) return ret;
 
     parse_whitespace(text);
     if (*text) {
         clear();
-        return PARSE_ROOT_NOT_SINGULAR;
+        return Ret::kParseRootNotSingular;
     }
 
     return ret;
@@ -112,17 +110,17 @@ void Json::stack_push(const char *s) {
 
 Ret Json::parse_text(const char *&text) {
     parse_whitespace(text);
-    if (!*text) return PARSE_EXPECT_VALUE;
+    if (!*text) return Ret::kParseExpectValue;
     switch (*text) {
-        case 'n': return parse_literal(text, LITERAL_NULL, TYPE_NULL);
-        case 't': return parse_literal(text, LITERAL_TRUE, TYPE_TRUE);
-        case 'f': return parse_literal(text, LITERAL_FALSE, TYPE_FALSE);
+        case 'n': return parse_literal(text, LITERAL_NULL, Type::kNull);
+        case 't': return parse_literal(text, LITERAL_TRUE, Type::kTrue);
+        case 'f': return parse_literal(text, LITERAL_FALSE, Type::kFalse);
         case '\"': return parse_string(text);
         case '[': return parse_array(text);
         case '{': return parse_object(text);
         default: return parse_number(text);
     }
-    return PARSE_INVALID_VALUE;
+    return Ret::kParseInvalidValue;
 }
 
 inline void Json::check_type(Type type, const char *msg) const {
@@ -142,10 +140,10 @@ inline void Json::parse_whitespace(const char *&text) {
 Ret Json::parse_literal(const char *&text, std::string_view literal,
                         Type type) {
     for (char c : literal) {
-        if (*text++ != c) return PARSE_INVALID_VALUE;
+        if (*text++ != c) return Ret::kParseInvalidValue;
     }
     type_ = type;
-    return PARSE_OK;
+    return Ret::kParseOk;
 }
 
 Ret Json::parse_number(const char *&text) {
@@ -159,29 +157,29 @@ Ret Json::parse_number(const char *&text) {
         ++p;
         while (isdigit(*p)) ++p;
     } else {
-        return PARSE_INVALID_VALUE;
+        return Ret::kParseInvalidValue;
     }
     if (*p == '.') {
         ++p;
-        if (!isdigit(*p)) return PARSE_INVALID_VALUE;
+        if (!isdigit(*p)) return Ret::kParseInvalidValue;
         ++p;
         while (isdigit(*p)) ++p;
     }
     if (*p == 'e' || *p == 'E') {
         ++p;
         if (*p == '+' || *p == '-') ++p;
-        if (!isdigit(*p)) return PARSE_INVALID_VALUE;
+        if (!isdigit(*p)) return Ret::kParseInvalidValue;
         ++p;
         while (isdigit(*p)) ++p;
     }
 
     double number = strtod(text, nullptr);
-    if (std::isinf(number)) return PARSE_NUMBER_TOO_BIG;
+    if (std::isinf(number)) return Ret::kParseNumberTooBig;
 
     text = p;
-    type_ = TYPE_NUMBER;
+    type_ = Type::kNumber;
     value_.number = number;
-    return PARSE_OK;
+    return Ret::kParseOk;
 }
 
 inline static int ch2hex(char ch) {
@@ -210,14 +208,14 @@ int Json::parse_hex4(const char *&text) {
 
 Ret Json::encode_utf8(const char *&text) {
     int code = parse_hex4(text);
-    if (code < 0) return PARSE_INVALID_UNICODE_HEX;
+    if (code < 0) return Ret::kParseInvalidUnicodeHex;
     if (code >= 0xD800 && code < 0xDC00) {
         if (*text++ != '\\' || *text++ != 'u') {
-            return PARSE_INVALID_UNICODE_SURROGATE;
+            return Ret::kParseInvalidUnicodeSurrogate;
         }
         int surrogate = parse_hex4(text);
         if (surrogate < 0 || !(surrogate >= 0xDC00 && surrogate < 0xE000)) {
-            return PARSE_INVALID_UNICODE_SURROGATE;
+            return Ret::kParseInvalidUnicodeSurrogate;
         }
         code = 0x10000 + (code - 0xD800) * 0x400 + (surrogate - 0xDC00);
     }
@@ -237,9 +235,9 @@ Ret Json::encode_utf8(const char *&text) {
         stack_push(0X80 | (0x3F & (code >> 6)));
         stack_push(0X80 | (0x3F & code));
     } else {
-        return PARSE_INVALID_UNICODE_HEX;
+        return Ret::kParseInvalidUnicodeHex;
     }
-    return PARSE_OK;
+    return Ret::kParseOk;
 }
 
 Ret Json::parse_string_raw(const char *&text) {
@@ -258,48 +256,48 @@ Ret Json::parse_string_raw(const char *&text) {
                 case '\\': stack_push('\\'); break;
                 case 'u': {
                     Ret ret = encode_utf8(text);
-                    if (ret != PARSE_OK) return ret;
+                    if (ret != Ret::kParseOk) return ret;
                 } break;
-                default: return PARSE_INVALID_STRING_ESCAPE;
+                default: return Ret::kParseInvalidStringEscape;
             }
         } else if (ch < 0x20) {
-            return PARSE_INVALID_STRING_CHAR;
+            return Ret::kParseInvalidStringChar;
         } else {
             stack_push(ch);
         }
     }
-    if (*text++ != '\"') return PARSE_MISS_QUOTATION_MARK;
-    return PARSE_OK;
+    if (*text++ != '\"') return Ret::kParseMissQuotationMark;
+    return Ret::kParseOk;
 }
 
 Ret Json::parse_string(const char *&text) {
     size_t old_top = stack_.size();
     Ret ret = parse_string_raw(text);
-    if (ret != PARSE_OK) return ret;
+    if (ret != Ret::kParseOk) return ret;
     value_.str =
         new std::string(stack_.data() + old_top, stack_.size() - old_top);
     stack_.resize(old_top);
-    type_ = TYPE_STRING;
-    return PARSE_OK;
+    type_ = Type::kString;
+    return Ret::kParseOk;
 }
 
 Ret Json::parse_array(const char *&text) {
     ++text;
     parse_whitespace(text);
     if (!*text) {
-        return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+        return Ret::kParseMissCommaOrSquareBracket;
     } else if (*text == ']') {
         ++text;
         value_.array = new std::vector<Json>();
-        type_ = TYPE_ARRAY;
-        return PARSE_OK;
+        type_ = Type::kArray;
+        return Ret::kParseOk;
     }
 
     std::vector<Json> array;
     for (;;) {
         Json value;
         Ret ret = value.parse_text(text);
-        if (ret != PARSE_OK) return ret;
+        if (ret != Ret::kParseOk) return ret;
         array.emplace_back(std::move(value));
 
         parse_whitespace(text);
@@ -307,42 +305,42 @@ Ret Json::parse_array(const char *&text) {
             ++text;
             break;
         } else if (*text != ',') {
-            return PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+            return Ret::kParseMissCommaOrSquareBracket;
         }
         ++text;
     }
     value_.array = new std::vector<Json>(std::move(array));
-    type_ = TYPE_ARRAY;
-    return PARSE_OK;
+    type_ = Type::kArray;
+    return Ret::kParseOk;
 }
 
 Ret Json::parse_object(const char *&text) {
     ++text;
     parse_whitespace(text);
     if (!*text) {
-        return PARSE_MISS_COMMA_OR_CURLY_BRACKET;
+        return Ret::kParseMissCommaOrCurlyBracket;
     } else if (*text == '}') {
         ++text;
         value_.object = new std::vector<std::pair<std::string, Json>>();
-        type_ = TYPE_OBJECT;
-        return PARSE_OK;
+        type_ = Type::kObject;
+        return Ret::kParseOk;
     }
 
     std::vector<std::pair<std::string, Json>> object;
     for (;;) {
         int old_top = stack_.size();
-        if (*text != '\"' || parse_string_raw(text) != PARSE_OK) {
-            return PARSE_MISS_KEY;
+        if (*text != '\"' || parse_string_raw(text) != Ret::kParseOk) {
+            return Ret::kParseMissKey;
         }
         parse_whitespace(text);
-        if (*text++ != ':') return PARSE_MISS_COLON;
+        if (*text++ != ':') return Ret::kParseMissColon;
 
         std::string key(stack_.data() + old_top, stack_.size() - old_top);
         stack_.resize(old_top);
 
         Json value;
         Ret ret = value.parse_text(text);
-        if (ret != PARSE_OK) return ret;
+        if (ret != Ret::kParseOk) return ret;
 
         object.emplace_back(std::move(key), std::move(value));
 
@@ -351,7 +349,7 @@ Ret Json::parse_object(const char *&text) {
             ++text;
             break;
         } else if (*text != ',') {
-            return PARSE_MISS_COMMA_OR_CURLY_BRACKET;
+            return Ret::kParseMissCommaOrCurlyBracket;
         }
         ++text;
         parse_whitespace(text);
@@ -359,14 +357,14 @@ Ret Json::parse_object(const char *&text) {
 
     value_.object =
         new std::vector<std::pair<std::string, Json>>(std::move(object));
-    type_ = TYPE_OBJECT;
-    return PARSE_OK;
+    type_ = Type::kObject;
+    return Ret::kParseOk;
 }
 
 bool Json::is_bool(bool b) const {
     switch (type_) {
-        case TYPE_TRUE: return b;
-        case TYPE_FALSE: return !b;
+        case Type::kTrue: return b;
+        case Type::kFalse: return !b;
         default: break;
     }
     throw std::runtime_error("text value isn't number!");
@@ -374,42 +372,42 @@ bool Json::is_bool(bool b) const {
 }
 
 double Json::get_number() const {
-    check_type(TYPE_NUMBER, "number");
+    check_type(Type::kNumber, "number");
     return value_.number;
 }
 
 const char *Json::get_string() const {
-    check_type(TYPE_STRING, "string");
+    check_type(Type::kString, "string");
     return value_.str->data();
 }
 
 size_t Json::get_array_size() const {
-    check_type(TYPE_ARRAY, "array");
+    check_type(Type::kArray, "array");
     return value_.array->size();
 }
 
 Json &Json::get_array_element(size_t idx) const {
-    check_type(TYPE_ARRAY, "array");
+    check_type(Type::kArray, "array");
     return (*value_.array)[idx];
 }
 
 size_t Json::get_object_size() const {
-    check_type(TYPE_OBJECT, "object");
+    check_type(Type::kObject, "object");
     return value_.object->size();
 }
 
 size_t Json::get_object_key_length(size_t idx) const {
-    check_type(TYPE_OBJECT, "object");
+    check_type(Type::kObject, "object");
     return (*value_.object)[idx].first.size();
 }
 
 const char *Json::get_object_key(size_t idx) const {
-    check_type(TYPE_OBJECT, "object");
+    check_type(Type::kObject, "object");
     return (*value_.object)[idx].first.data();
 }
 
 Json &Json::get_object_value(size_t idx) const {
-    check_type(TYPE_OBJECT, "object");
+    check_type(Type::kObject, "object");
     return (*value_.object)[idx].second;
 }
 
@@ -540,13 +538,13 @@ char *Json::stringify_object() {
 
 char *Json::stringify() {
     switch (type_) {
-        case TYPE_NULL: return str_dup(LITERAL_NULL, 4);
-        case TYPE_TRUE: return str_dup(LITERAL_TRUE, 4);
-        case TYPE_FALSE: return str_dup(LITERAL_FALSE, 5);
-        case TYPE_NUMBER: return stringify_number();
-        case TYPE_STRING: return stringify_string();
-        case TYPE_ARRAY: return stringify_array();
-        case TYPE_OBJECT: return stringify_object();
+        case Type::kNull: return str_dup(LITERAL_NULL, 4);
+        case Type::kTrue: return str_dup(LITERAL_TRUE, 4);
+        case Type::kFalse: return str_dup(LITERAL_FALSE, 5);
+        case Type::kNumber: return stringify_number();
+        case Type::kString: return stringify_string();
+        case Type::kArray: return stringify_array();
+        case Type::kObject: return stringify_object();
         default: break;
     }
     return nullptr;
